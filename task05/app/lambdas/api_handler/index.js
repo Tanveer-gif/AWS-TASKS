@@ -1,49 +1,71 @@
-const AWS = require('aws-sdk');
-const { v4: uuidv4 } = require('uuid');
-
-const dynamodb = new AWS.DynamoDB.DocumentClient();
-const TABLE_NAME = process.env.TARGET_TABLE || "cmtr-6cb77e6d-Events-92rw"; // Use the actual table name
-
-exports.handler = async (event) => {
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { v4 as uuidv4 } from "uuid";
+ 
+const dynamoDBClient = new DynamoDBClient();
+const TABLE_NAME = process.env.TABLE_NAME || "Events";
+ 
+ 
+export const handler = async (event) => {
     try {
-        console.log("Received event:", JSON.stringify(event));
-
-        // Ensure event.body is parsed correctly
-        const requestBody = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
-
-        // Validate required fields
-        if (!requestBody.principalId || !requestBody.content) {
+        console.log("Received event:", JSON.stringify(event, null, 2));
+ 
+        let inputEvent;
+        try {
+            inputEvent = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
+        } catch (parseError) {
+            console.error("Error parsing event body:", parseError);
             return {
                 statusCode: 400,
-                body: JSON.stringify({ message: "Missing required fields: principalId or content" })
+                body: JSON.stringify({ message: "Invalid JSON format in request body" })
             };
         }
-
-        const newEvent = {
-            id: uuidv4(),  // Generate a UUID
-            principalId: requestBody.principalId,
-            createdAt: new Date().toISOString(),  // Format as ISO 8601
-            body: requestBody.content
+ 
+        if (!inputEvent?.principalId || inputEvent?.content === undefined) {
+            console.error("Validation failed: Missing required fields", inputEvent);
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ message: "Invalid input: principalId and content are required" })
+            };
+        }
+ 
+        const eventId = uuidv4();
+        const createdAt = new Date().toISOString();
+ 
+        const eventItem = {
+            id: eventId,
+            principalId: Number(inputEvent.principalId),
+            createdAt,
+            body: inputEvent.content
         };
-
-        // Save to DynamoDB
-        await dynamodb.put({
+ 
+        console.log("Saving to DynamoDB:", JSON.stringify(eventItem, null, 2));
+ 
+        const response = await dynamoDBClient.send(new PutCommand({
             TableName: TABLE_NAME,
-            Item: newEvent
-        }).promise();
-
-        // ✅ Ensure correct response format
-        return {
-            statusCode: 201,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ statusCode: 201, event: newEvent }) // Include statusCode inside body
-        };
-
+            Item: eventItem,
+        }));
+        console.log("Saved successfully");
+ 
+        console.log("DynamoDB Response:", response);
+ 
+        const responseObject = {
+                            statusCode: 201,
+                            body: JSON.stringify({
+                            statusCode: 201,
+                            event: eventItem
+                            })
+ 
+                        };
+ 
+        return responseObject;
+ 
     } catch (error) {
-        console.error("Error:", error);
+        console.error("Error processing request:", error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ message: "Error processing request", error: error.message })
+            body: JSON.stringify({ message: "Internal server error", error: error.message })
         };
     }
 };
+ 
