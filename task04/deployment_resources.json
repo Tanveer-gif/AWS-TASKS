@@ -17,7 +17,11 @@
             "kms:Decrypt",
             "sqs:ReceiveMessage",
             "sqs:DeleteMessage",
-            "sqs:GetQueueAttributes"
+            "sqs:GetQueueAttributes",
+            "sns:ListTopics",
+            "sns:Publish",
+            "sns:Subscribe",
+            "sns:CreateTopic"
 
           ],
           "Effect": "Allow",
