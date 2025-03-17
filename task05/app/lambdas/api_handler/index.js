@@ -1,15 +1,18 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { v4 as uuidv4 } from "uuid";
- 
-const dynamoDBClient = new DynamoDBClient();
-const TABLE_NAME = process.env.TABLE_NAME || "Events";
- 
- 
+
+// Ensure the correct AWS region is set
+const dynamoDBClient = new DynamoDBClient({ region: process.env.AWS_REGION || "eu-west-1" });
+
+// Use the correct DynamoDB table name from the environment variable
+const TABLE_NAME = process.env.TARGET_TABLE || "cmtr-6cb77e6d-Events-8fw8";
+
 export const handler = async (event) => {
     try {
         console.log("Received event:", JSON.stringify(event, null, 2));
- 
+
+        // Ensure event.body is properly parsed
         let inputEvent;
         try {
             inputEvent = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
@@ -20,7 +23,8 @@ export const handler = async (event) => {
                 body: JSON.stringify({ message: "Invalid JSON format in request body" })
             };
         }
- 
+
+        // Validate required fields
         if (!inputEvent?.principalId || inputEvent?.content === undefined) {
             console.error("Validation failed: Missing required fields", inputEvent);
             return {
@@ -28,38 +32,35 @@ export const handler = async (event) => {
                 body: JSON.stringify({ message: "Invalid input: principalId and content are required" })
             };
         }
- 
+
+        // Generate a UUID and timestamp
         const eventId = uuidv4();
         const createdAt = new Date().toISOString();
- 
+
         const eventItem = {
             id: eventId,
             principalId: Number(inputEvent.principalId),
             createdAt,
             body: inputEvent.content
         };
- 
+
         console.log("Saving to DynamoDB:", JSON.stringify(eventItem, null, 2));
- 
-        const response = await dynamoDBClient.send(new PutCommand({
+
+        // Save to DynamoDB
+        await dynamoDBClient.send(new PutCommand({
             TableName: TABLE_NAME,
             Item: eventItem,
         }));
+
         console.log("Saved successfully");
- 
-        console.log("DynamoDB Response:", response);
- 
-        const responseObject = {
-                            statusCode: 201,
-                            body: JSON.stringify({
-                            statusCode: 201,
-                            event: eventItem
-                            })
- 
-                        };
- 
-        return responseObject;
- 
+
+        // ✅ Correct response format
+        return {
+            statusCode: 201,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(eventItem) // ✅ Response body should contain only the event data
+        };
+
     } catch (error) {
         console.error("Error processing request:", error);
         return {
@@ -68,4 +69,3 @@ export const handler = async (event) => {
         };
     }
 };
- 
